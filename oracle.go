@@ -4,13 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
-	"strconv"
-	"strings"
-
-	"gorm.io/gorm/utils"
-
-	_ "github.com/godror/godror"
+	_ "github.com/sijms/go-ora/v2"
 	"github.com/thoas/go-funk"
 	"gorm.io/gorm"
 	"gorm.io/gorm/callbacks"
@@ -18,6 +12,10 @@ import (
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/migrator"
 	"gorm.io/gorm/schema"
+	"gorm.io/gorm/utils"
+	"regexp"
+	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -60,7 +58,8 @@ func (d Dialector) Initialize(db *gorm.DB) (err error) {
 		DeleteClauses: []string{"DELETE", "FROM", "WHERE", "RETURNING"},
 	})
 
-	d.DriverName = "godror"
+	// https://github.com/sijms/go-ora
+	d.DriverName = "oracle"
 
 	if d.Conn != nil {
 		db.ConnPool = d.Conn
@@ -127,7 +126,7 @@ func (d Dialector) RewriteLimit(c clause.Clause, builder clause.Builder) {
 	}
 }
 
-//Oracle11 Limit
+// Oracle11 Limit
 func (d Dialector) RewriteLimit11(c clause.Clause, builder clause.Builder) {
 	if limit, ok := c.Expression.(clause.Limit); ok {
 		if stmt, ok := builder.(*gorm.Statement); ok {
@@ -179,7 +178,24 @@ func (d Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement, v inter
 }
 
 func (d Dialector) QuoteTo(writer clause.Writer, str string) {
+
+	if s := strings.ToUpper(str); anyOf(s, "DELETE", "SIZE", "CIPHER", "LIMIT") {
+		// 给列名加上双引号。约定：Oracle 的列名大写
+		writer.WriteString(`"`)
+		writer.WriteString(s)
+		writer.WriteString(`"`)
+		return
+	}
 	writer.WriteString(str)
+}
+
+func anyOf(s string, arr ...string) bool {
+	for _, s2 := range arr {
+		if s == s2 {
+			return true
+		}
+	}
+	return false
 }
 
 var numericPlaceholder = regexp.MustCompile(`:(\d+)`)
